@@ -1,0 +1,6 @@
+.env
+vector_db
+venv/
+# Ignore python artifacts
+__pycache__/
+*.pyc
