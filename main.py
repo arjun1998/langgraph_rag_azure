@@ -1,11 +1,15 @@
 from dotenv import load_dotenv
 import os
 from langchain_chroma import Chroma
-from langchain_openai import OpenAIEmbeddings,ChatOpenAI
+from langchain_openai import AzureOpenAIEmbeddings,AzureChatOpenAI
 from langchain.tools import tool
 load_dotenv()
 persist_directory="./vector_db"
-embeddings=OpenAIEmbeddings(model="text-embedding-3-large")
+azure_endpoint="https://azure-openai-wk.cognitiveservices.azure.com/openai/deployments/text-embedding-3-large/embeddings?api-version=2023-05-15"
+embeddings=AzureOpenAIEmbeddings(model="text-embedding-3-large",
+                                 azure_endpoint=azure_endpoint,
+                                api_key=os.getenv("AZURE_OPENAI_API_KEY"))
+
 vector_store = Chroma(collection_name = "hybrid_collection",
                     embedding_function = embeddings,
                     persist_directory=persist_directory)
@@ -28,7 +32,11 @@ prompt =(
     "You have access to a tool that retrieves context from a blog post. "
     "Use the tool to help answer user queries."
 )
-model = ChatOpenAI(model="gpt-4.1")
+model = AzureChatOpenAI(azure_deployment="gpt-4o",
+                        api_version="2024-12-01-preview",
+                           temperature=0,
+                           api_key=os.getenv("AZURE_OPENAI_INFERENCE_API_KEY"),
+                           azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"))
 agent = create_agent(model, tools, system_prompt=prompt)
 
 query=(
