@@ -1,52 +1,18 @@
-from dotenv import load_dotenv
-import os
-from langchain_chroma import Chroma
-from langchain_openai import AzureOpenAIEmbeddings,AzureChatOpenAI
-from langchain.tools import tool
-load_dotenv()
-persist_directory="./vector_db"
-azure_endpoint="https://azure-openai-wk.cognitiveservices.azure.com/openai/deployments/text-embedding-3-large/embeddings?api-version=2023-05-15"
-embeddings=AzureOpenAIEmbeddings(model="text-embedding-3-large",
-                                 azure_endpoint=azure_endpoint,
-                                api_key=os.getenv("AZURE_OPENAI_API_KEY"))
+from langgraph.graph import StateGraph, END, START
+from nodes.ingest import ingest_node, GraphState
+from nodes.retrieve import retrieve_node
+from nodes.answer import answer_node
 
-vector_store = Chroma(collection_name = "hybrid_collection",
-                    embedding_function = embeddings,
-                    persist_directory=persist_directory)
+graph = StateGraph(GraphState)
+graph.add_node("ingest", ingest_node)
+graph.add_node("retrieve", retrieve_node)   
+graph.add_node("answer", answer_node)    
+graph.add_edge(START, "ingest")
+graph.add_edge("ingest", "retrieve")
+graph.add_edge("retrieve", "answer")    
+graph.add_edge("answer", END)
+app=graph.compile()
 
-@tool(response_format="content_and_artifact")
-def retrieve_context(query:str):
-    """Retrieve information to help answer a query."""    
-    retrieved_docs = vector_store.similarity_search(query,k=5)
-    serialized ="\n\n".join(
-        (f"Source:{doc.metadata}\nContent:{doc.page_content}")
-        for doc in retrieved_docs
-    )
-    return serialized,retrieved_docs
-
-from langchain.agents import create_agent
-
-tools = [retrieve_context]
-
-prompt =(
-    "You have access to a tool that retrieves context from a blog post. "
-    "Use the tool to help answer user queries."
-)
-model = AzureChatOpenAI(azure_deployment="gpt-4o",
-                        api_version="2024-12-01-preview",
-                           temperature=0,
-                           api_key=os.getenv("AZURE_OPENAI_INFERENCE_API_KEY"),
-                           azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"))
-agent = create_agent(model, tools, system_prompt=prompt)
-
-query=(
-    ##"What is the standard method for Task Decomposition?\n\n"
-    ##"Once you get the answer, look up common extensions of that method."
-    "Tell me the details of all the hyundai creta"
-)
-
-for event in agent.stream(
-    {"messages":[{"role":"user","content":query}]},
-    stream_mode="values",
-):
-    event["messages"][-1].pretty_print()
+if __name__ == "__main__":
+    result = app.invoke({"query":"Give the details of all Hyundai Creta"})
+    print(result)
